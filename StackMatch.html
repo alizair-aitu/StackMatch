@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StackMatch — Find your teammate</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#f3f4f8;margin:0;color:#222}
+  header{background:#4f46e5;color:#fff;padding:16px;text-align:center;font-size:1.4rem}
+  main{max-width:900px;margin:20px auto;padding:0 16px}
+  section{background:#fff;border-radius:12px;padding:18px;margin-bottom:20px;box-shadow:0 1px 4px #0002}
+  input,select{width:100%;padding:10px;margin:6px 0 12px;border:1px solid #ccc;border-radius:8px;font:inherit;box-sizing:border-box}
+  button{background:#4f46e5;color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:1rem}
+  button.danger{background:#fff;color:#dc2626;border:1px solid #dc2626;padding:6px 12px;font-size:.9rem}
+  .row{display:flex;gap:8px;flex-wrap:wrap}.row input{flex:1;min-width:200px}.row select{width:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .card{border:1px solid #e3e3ea;border-radius:10px;padding:14px}
+  .tag{display:inline-block;background:#e0e7ff;color:#4338ca;padding:3px 10px;border-radius:99px;margin:2px;font-size:.85rem}
+  small{color:#666}
+</style>
+</head>
+<body>
+<header>🤝 StackMatch — find a teammate for your project</header>
+<main>
+
+  <section>
+    <h2>Sign up</h2>
+    <label>Full name</label>
+    <input id="name" placeholder="name surname">
+    <label>Your skills <small>(separated by commas)</small></label>
+    <input id="skills" placeholder="3D modeling, AI creator">
+    <label>Contact <small>(Telegram / email)</small></label>
+    <input id="contact" placeholder="@username">
+    <label>Secret PIN <small>(you will need it to remove your profile later)</small></label>
+    <input id="pin" type="password" placeholder="e.g. 1234">
+    <button onclick="addStudent()">Sign up</button>
+    <p id="msg" style="color:#dc2626"></p>
+  </section>
+
+  <section>
+    <h2>Find a teammate</h2>
+    <div class="row">
+      <input id="q" placeholder="Skills you need:" oninput="render()">
+      <select id="mode" onchange="render()">
+        <option value="any">Match any skill</option>
+        <option value="all">Match all skills</option>
+      </select>
+    </div>
+    <div id="list" class="grid"></div>
+  </section>
+
+</main>
+
+<script>
+  let students = [];
+  try { students = JSON.parse(localStorage.getItem("students") || "[]"); } catch (e) {}
+  // migrate old records that were saved without id / pin
+  students = students.map((s, i) => ({ ...s, id: s.id ?? (Date.now() + i), pin: s.pin ?? "" }));
+
+  const split = s => s.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+  const esc = s => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const save = () => { try { localStorage.setItem("students", JSON.stringify(students)); } catch (e) {} };
+  const msg = t => { const m = document.getElementById("msg"); m.textContent = t; };
+
+  function addStudent() {
+    const name = document.getElementById("name").value.trim();
+    const skills = split(document.getElementById("skills").value);
+    const contact = document.getElementById("contact").value.trim();
+    const pin = document.getElementById("pin").value;
+    if (!name || !skills.length || !contact || !pin) return msg("Please fill in all fields.");
+    msg("");
+    students.push({ id: Date.now(), name, skills, contact, pin });
+    save();
+    ["name","skills","contact","pin"].forEach(id => document.getElementById(id).value = "");
+    render();
+  }
+
+  function askRemove(id) {
+    const s = students.find(x => x.id === id);
+    if (!s.pin) return doRemove(id);          // old profile without PIN
+    document.getElementById("rm-" + id).style.display = "block";
+  }
+
+  function confirmRemove(id) {
+    const s = students.find(x => x.id === id);
+    const val = document.getElementById("pin-" + id).value;
+    if (val !== s.pin) return (document.getElementById("err-" + id).textContent = "Wrong PIN.");
+    doRemove(id);
+  }
+
+  function doRemove(id) {
+    students = students.filter(x => x.id !== id);
+    save();
+    render();
+  }
+
+  function render() {
+    const wanted = split(document.getElementById("q").value);
+    const all = document.getElementById("mode").value === "all";
+    const found = students.filter(s => {
+      if (!wanted.length) return true;
+      const has = w => s.skills.some(k => k.includes(w));
+      return all ? wanted.every(has) : wanted.some(has);
+    });
+    document.getElementById("list").innerHTML = found.length
+      ? found.map(s => `
+          <div class="card">
+            <h3>${esc(s.name)}</h3>
+            ${s.skills.map(k => `<span class="tag">${esc(k)}</span>`).join("")}
+            <p>📩 ${esc(s.contact)}</p>
+            <button class="danger" onclick="askRemove(${s.id})">I found a team — remove me</button>
+            <div id="rm-${s.id}" style="display:none;margin-top:8px">
+              <input id="pin-${s.id}" type="password" placeholder="Enter your secret PIN">
+              <button class="danger" onclick="confirmRemove(${s.id})">Confirm removal</button>
+              <small id="err-${s.id}" style="color:#dc2626"></small>
+            </div>
+          </div>`).join("")
+      : "<p>No students found.</p>";
+  }
+  render();
+</script>
+</body>
+</html>
